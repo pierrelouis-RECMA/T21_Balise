@@ -17,26 +17,32 @@ def duplicate_slide(prs, source_slide):
     slide_layout = source_slide.slide_layout
     new_slide = prs.slides.add_slide(slide_layout)
     for shape in source_slide.shapes:
-        # Utilisation d'une méthode plus robuste pour copier les formes
         new_el = copy.deepcopy(shape.element)
         new_slide.shapes._spTree.insert_element_before(new_el, 'p:extLst')
     return new_slide
 
+def replace_text_in_tf(tf, replacements):
+    """Gère le remplacement dans un text_frame de manière sécurisée."""
+    for paragraph in tf.paragraphs:
+        for run in paragraph.runs:
+            for tag, value in replacements.items():
+                if tag in run.text:
+                    run.text = run.text.replace(tag, str(value))
+
 def replace_tags_in_shape(shape, replacements):
+    """Parcourt les formes (groupes, textes, tableaux) pour remplacer les balises."""
     if shape.shape_type == MSO_SHAPE_TYPE.GROUP:
         for s in shape.shapes:
             replace_tags_in_shape(s, replacements)
+    
     elif shape.has_text_frame:
-        for paragraph in shape.text_frame.paragraphs:
-            for run in paragraph.runs:
-                for tag, value in replacements.items():
-                    if tag in run.text:
-                        run.text = run.text.replace(tag, str(value))
+        replace_text_in_tf(shape.text_frame, replacements)
+            
     elif shape.has_table:
         for row in shape.table.rows:
             for cell in row.cells:
-                if cell.has_text_frame:
-                    replace_tags_in_shape(cell, replacements)
+                # Une cellule a TOUJOURS un text_frame, pas besoin de has_text_frame
+                replace_text_in_tf(cell.text_frame, replacements)
 
 def build_agency_pptx(df_excel, template_path):
     df = df_excel.copy()
@@ -58,10 +64,10 @@ def build_agency_pptx(df_excel, template_path):
         replacements[f"{{{{NBB_{idx}}}}}"] = format_nbb(row['Integrated Spends'])
         
         ag_data = df[df['Agency'] == ag_name]
+        # Attention aux noms de colonnes itertuples : les espaces deviennent des underscores
         wins = ag_data[ag_data['NewBiz'] == 'WIN'].sort_values('Integrated Spends', ascending=False).head(3)
         deps = ag_data[ag_data['NewBiz'] == 'DEPARTURE'].sort_values('Integrated Spends', ascending=True).head(3)
         
-        # Correction ici : accès sécurisé aux attributs du tuple (itertuples)
         replacements[f"{{{{TOPWINS_{idx}}}}}"] = " · ".join([f"{getattr(r, 'Advertiser', 'N/A')} {format_nbb(getattr(r, 'Integrated_Spends', 0))}" for r in wins.itertuples()])
         replacements[f"{{{{TOPDEPS_{idx}}}}}"] = " · ".join([f"{getattr(r, 'Advertiser', 'N/A')} {format_nbb(getattr(r, 'Integrated_Spends', 0))}" for r in deps.itertuples()])
 
@@ -91,9 +97,10 @@ def build_agency_pptx(df_excel, template_path):
             for shape in current_slide.shapes:
                 replace_tags_in_shape(shape, {**replacements, **page_replacements})
 
-    # 3. Remplissage des slides statiques (0-4)
+    # 3. Remplissage des autres slides
     for i, slide in enumerate(prs.slides):
-        if i >= SLIDE_INDEX_DETAILS: continue 
+        if i >= SLIDE_INDEX_DETAILS and i < SLIDE_INDEX_DETAILS + pages_needed: 
+            continue # Déjà fait plus haut
         for shape in slide.shapes:
             replace_tags_in_shape(shape, replacements)
 
