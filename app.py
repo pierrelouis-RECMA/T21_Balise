@@ -21,7 +21,7 @@ def store_file(data, filename):
     token = str(uuid.uuid4())
     expiry = datetime.now() + timedelta(minutes=10)
     with _lock:
-        # On stocke en dictionnaire pour être explicite
+        # Stockage explicite sous forme de dictionnaire
         _cache[token] = {"data": data, "filename": filename, "expiry": expiry}
     return token
 
@@ -87,7 +87,7 @@ def generate():
             return jsonify({"status": "error", "error": "Fichier Excel manquant"}), 400
 
         df = pd.read_excel(file)
-        # Appel au script generate_pptx_v3.py
+        # L'appel doit retourner des bytes
         pptx_bytes = build_agency_pptx(df, TEMPLATE_PATH)
 
         filename = f"NBB_Report_{datetime.now().strftime('%H%M')}.pptx"
@@ -98,6 +98,7 @@ def generate():
             "download_url": f"{request.host_url.rstrip('/')}/download/{token}"
         })
     except Exception as e:
+        print(traceback.format_exc()) # Utile pour le debug console
         return jsonify({"status": "error", "error": str(e)}), 500
 
 @app.route("/download/<token>")
@@ -108,14 +109,15 @@ def download(token):
     if not entry:
         abort(404, "Fichier non trouvé ou expiré.")
 
-    # SÉCURITÉ ANTI-TUPLE : On vérifie si c'est un dictionnaire ou un tuple
+    # SÉCURITÉ RENFORCÉE : On gère les deux types de stockage possibles
     if isinstance(entry, dict):
-        data = entry["data"]
-        name = entry["filename"]
-    else:
-        # Si c'est un vieux tuple resté en mémoire
+        data = entry.get("data")
+        name = entry.get("filename")
+    elif isinstance(entry, (tuple, list)):
         data = entry[0]
         name = entry[1]
+    else:
+        abort(500, "Format de cache corrompu.")
     
     return send_file(
         io.BytesIO(data),
