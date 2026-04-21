@@ -234,7 +234,7 @@ def agencies_to_slides(agencies: list) -> dict:
     """
     slides = {}
     for i, start in enumerate(range(0, len(agencies), AGENCIES_PER_SLIDE)):
-        slides[22 + i] = agencies[start:start + AGENCIES_PER_SLIDE]
+        slides[7 + i] = agencies[start:start + AGENCIES_PER_SLIDE]
     return slides
 
 # ─────────────────────────────────────────────────────────────
@@ -558,7 +558,7 @@ def agency_card(ag: dict, bx, by, bw, bh, pfx: str) -> list:
 
 # ── Build one slide XML ───────────────────────────────────────
 def build_slide_xml(slide_num: int, agencies: list, nav_rids: dict = None) -> str:
-    _id[0] = 1000 + (slide_num - 21) * 5000
+    _id[0] = 1000 + (slide_num - 6) * 5000
 
     content_top = NAV_H + MARG_TOP
     content_bot = FOOTER_Y - 40000
@@ -693,7 +693,7 @@ def build_agency_pptx(df: pd.DataFrame, template_path: str,
     with zipfile.ZipFile(io.BytesIO(tpl_bytes), "r") as zin:
         files = {n: zin.read(n) for n in zin.namelist()}
 
-    FIRST_AGENCY_SLIDE = 22
+    FIRST_AGENCY_SLIDE = 7
 
     existing_slides = sorted(
         [k for k in files if re.match(r"ppt/slides/slide(\d+)\.xml$", k)],
