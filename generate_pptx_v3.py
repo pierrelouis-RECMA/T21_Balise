@@ -565,6 +565,8 @@ def build_slide_xml(slide_num: int, agencies: list, nav_rids: dict = None) -> st
     available   = content_bot - content_top
     card_hs     = card_heights(agencies, available)
 
+    P_NS = "http://schemas.openxmlformats.org/presentationml/2006/main"
+    A_NS = "http://schemas.openxmlformats.org/drawingml/2006/main"
     sld = ET.Element(tp("sld"))
     cs  = ET.SubElement(sld, tp("cSld"))
     bg  = ET.SubElement(cs, tp("bg"))
@@ -594,6 +596,10 @@ def build_slide_xml(slide_num: int, agencies: list, nav_rids: dict = None) -> st
         cy += card_hs[i] + CARD_GAP
 
     for s in footer(): st.append(s)
+
+    # PowerPoint requiert p:clrMapOvr dans chaque slide (sinon "cannot read")
+    clr = ET.SubElement(sld, tp("clrMapOvr"))
+    ET.SubElement(clr, ta("masterClrMapping"))
 
     # Indent + serialize
     _indent(sld)
@@ -747,25 +753,50 @@ def build_agency_pptx(df: pd.DataFrame, template_path: str,
 
     for snum in range(FIRST_AGENCY_SLIDE, max_existing + 1):
         prs_xml  = re.sub(rf'\s*<p:sldId[^>]*r:id="rId{snum}"[^/]*/>', "", prs_xml)
-        rels_xml = re.sub(rf'<Relationship Id="rId{snum}"[^/]*/>', "", rels_xml)
+
+    # Calculer dynamiquement les prochains rId et sldId libres
+    # pour éviter toute collision avec les rIds existants du template
+    import re as _re
+    _existing_rids     = set(int(m) for m in _re.findall(r'Id="rId(\d+)"', rels_xml))
+    _existing_sld_ids  = set(int(m) for m in _re.findall(r'<p:sldId id="(\d+)"', prs_xml))
+    next_rid    = max(_existing_rids,    default=25) + 1
+    next_sld_id = max(_existing_sld_ids, default=300) + 1
+
+    # Mapping snum → rId (utilisé plus bas pour make_nav_rid_map)
+    _snum_to_rid = {}
 
     new_sld_ids = ""
     new_rels    = ""
-    base_id     = 300
     for snum in sorted(slides.keys()):
-        new_sld_ids += f'\n    <p:sldId id="{base_id}" r:id="rId{snum}"/>'
+        rid = f"rId{next_rid}"
+        _snum_to_rid[snum] = rid
+        new_sld_ids += f'\n    <p:sldId id="{next_sld_id}" r:id="{rid}"/>'
         new_rels    += (
-            f'\n  <Relationship Id="rId{snum}" '
+            f'\n  <Relationship Id="{rid}" '
             f'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" '
             f'Target="slides/slide{snum}.xml"/>'
         )
-        base_id += 1
+        next_rid    += 1
+        next_sld_id += 1
+
 
     prs_xml  = prs_xml.replace("</p:sldIdLst>", new_sld_ids + "\n  </p:sldIdLst>")
     rels_xml = rels_xml.replace("</Relationships>",  new_rels + "\n</Relationships>")
 
     files["ppt/presentation.xml"]            = prs_xml.encode("utf-8")
     files["ppt/_rels/presentation.xml.rels"] = rels_xml.encode("utf-8")
+
+    # ── Mettre à jour [Content_Types].xml ─────────────────────────────────────
+    # Les slides agency générées doivent y être déclarées sinon PowerPoint refuse
+    # d'ouvrir le fichier ("cannot read")
+    SLIDE_CT = 'application/vnd.openxmlformats-officedocument.presentationml.slide+xml'
+    ct_xml   = files["[Content_Types].xml"].decode("utf-8")
+    for snum in sorted(slides.keys()):
+        part_name = f"/ppt/slides/slide{snum}.xml"
+        if part_name not in ct_xml:
+            entry = f'  <Override PartName="{part_name}" ContentType="{SLIDE_CT}"/>'
+            ct_xml = ct_xml.replace("</Types>", entry + "\n</Types>")
+    files["[Content_Types].xml"] = ct_xml.encode("utf-8")
 
     # Repack en PPTX
     buf = io.BytesIO()
