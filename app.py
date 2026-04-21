@@ -20,7 +20,7 @@ from flask import Flask, abort, jsonify, render_template_string, request, send_f
 from pptx import Presentation
 
 from fill_template import load_data_from_df, build_placeholders, replace_all_placeholders
-from generate_pptx_v2 import build_agency_pptx
+from generate_pptx_v3 import build_agency_pptx
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024  # 20 MB

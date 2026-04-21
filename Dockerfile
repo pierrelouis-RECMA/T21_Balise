@@ -12,7 +12,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code + template
-COPY app.py fill_template.py generate_pptx_v2.py ./
+COPY app.py fill_template.py generate_pptx_v3.py ./
 COPY T21_HK_Agencies_Glass_v13.pptx ./
 
 # Render injects $PORT at runtime (default 10000)
