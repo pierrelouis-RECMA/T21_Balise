@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-generate_pptx_v3.py — NBB Report Generator (unified pipeline)
+generate_pptx_v2.py — NBB Agency Cards Generator (dynamic)
 ───────────────────────────────────────────────────────────
 Lit un DataFrame pandas (issu de l'Excel NBB) et génère
 les slides "Agency Cards" en XML direct dans le template
@@ -653,29 +653,16 @@ def make_slide_rels(nav_rid_map: dict) -> str:
 def build_agency_pptx(df: pd.DataFrame, template_path: str,
                       prefilled_prs_bytes: bytes = None) -> bytes:
     """
-    Point d'entrée unique — appelé par app.py.
-
-    Pipeline en 2 étapes :
-      1. fill_template : remplace les balises {{...}} dans les slides 1-6
-      2. injection XML : génère les slides agency cards (7+) dynamiquement
-
-    df            : DataFrame Excel (Agency, NewBiz, Advertiser, Integrated Spends…)
-    template_path : chemin vers T21_HK_Agencies_Glass_v13.pptx
-    prefilled_prs_bytes : optionnel — PPTX déjà pré-rempli (étape 1 déjà faite)
-    Retourne : bytes du PPTX final complet.
+    Point d'entrée principal.
+    df                  : DataFrame NBB
+    template_path       : chemin vers le template .pptx (utilisé si
+                          prefilled_prs_bytes est None)
+    prefilled_prs_bytes : bytes d'un PPTX déjà pré-rempli (balises
+                          statiques déjà remplacées par fill_template).
+                          Si fourni, template_path sert uniquement de
+                          fallback pour lire le zip.
+    Retourne : bytes du PPTX final avec slides agency injectées.
     """
-    # ── Étape 1 : remplir les balises des slides statiques (1-6) ──────────────
-    if prefilled_prs_bytes is None:
-        from fill_template import load_data_from_df, build_placeholders, replace_all_placeholders
-        from pptx import Presentation as _Prs
-        _data = load_data_from_df(df)
-        _ph   = build_placeholders(_data)
-        _prs  = _Prs(template_path)
-        replace_all_placeholders(_prs, _ph)
-        _buf  = io.BytesIO()
-        _prs.save(_buf)
-        prefilled_prs_bytes = _buf.getvalue()
-        print(f"  ✅ Étape 1 : {len(_ph)} balises remplacées")
     agencies = df_to_agencies(df)
     slides   = agencies_to_slides(agencies)   # {22: [...], 23: [...], ...}
 
